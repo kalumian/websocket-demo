@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: websocket-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production

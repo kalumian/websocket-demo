@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIGNAL R</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+</head>
+<body>
+    <label for="Group">Group</label>
+    <input type="text" id="Group">
+    <button id="Join">Join</button>
+    <button id="Leave">Leave</button>
+
+    <table id="messages">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody id="messagesBody"></tbody>
+        <tfoot>
+            <tr>
+                <td colspan="2">
+                    <input type="text" id="Message">
+                    <button id="Send">Send</button>
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/chatHub")
+            .build();
+
+        const messagesBody = document.getElementById("messagesBody");
+
+        function addRow(user, message) {
+            messagesBody.innerHTML += `<tr><td>${user}</td><td>${message}</td></tr>`;
+        }
+
+        connection.on("ReceiveMessage", (user, message) => {
+            addRow(user, message);
+        });
+        connection.start()
+            .then(() => console.log("Connected to the hub"))
+            .catch((err) => console.log("Error:", err));
+
+        document.getElementById("Join").onclick = async () => {
+            const groupName = document.getElementById("Group").value.trim();
+            if (!groupName) return;
+
+            try {
+                await connection.invoke("JoinGroup", groupName);
+
+                const messages = await connection.invoke("GetMessages", groupName);
+                messagesBody.innerHTML = "";
+                messages.forEach((item) => addRow(item.user, item.message));
+            } catch (err) {
+                console.log(err);
+            }
+        };
+
+        document.getElementById("Leave").onclick = async () => {
+            const groupName = document.getElementById("Group").value.trim();
+            if (!groupName) return;
+
+            try {
+                await connection.invoke("LeaveGroup", groupName);
+                document.getElementById("Group").value = "";
+                messagesBody.innerHTML = "";
+            } catch (err) {
+                console.log(err);
+            }
+        };
+
+        document.getElementById("Send").onclick = async () => {
+            const groupName = document.getElementById("Group").value.trim();
+            const message = document.getElementById("Message").value.trim();
+            if (!groupName || !message) return;
+
+            try {
+                await connection.invoke("SendMessage", groupName, message);
+                document.getElementById("Message").value = "";
+            } catch (err) {
+                console.log(err);
+            }
+        };
+    </script>
+</body>
+</html>
