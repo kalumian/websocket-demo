@@ -1,52 +1,129 @@
+using System.Collections.Concurrent;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
-public interface IChatHub
+public interface IChatClient
 {
-    Task ReceiveMessage(string user, string message);
+    Task ReceiveMessage(string user, string message, string at);
+    Task UserTyping(string user, bool isTyping);
+    Task UserJoined(string user);
+    Task UserLeft(string user);
 }
 
-public record ChatMessage(string User, string Message);
-
-[Authorize(AuthenticationSchemes = "Cookies,Bearer")]
-public class ChatHub(Dictionary<string, List<ChatMessage>> messages) : Hub<IChatHub>
+[Authorize(AuthenticationSchemes = "Bearer")]
+public class ChatHub(AppDbContext db) : Hub<IChatClient>
 {
-    private readonly Dictionary<string, List<ChatMessage>> _messages = messages;
+    // اتصالات مصرّح لها بدخول غرفة بعد التحقق من الكود/كلمة السر
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> Access = new();
 
-    public async Task JoinGroup(string groupName)
+    private string Username =>
+        Context.User?.FindFirstValue(ClaimTypes.Name)
+        ?? Context.User?.Identity?.Name
+        ?? "زائر";
+
+    public async Task<bool> JoinRoom(string roomName, string? code, string? password)
     {
-        if (!_messages.ContainsKey(groupName))
-            _messages[groupName] = [];
+        roomName = roomName?.Trim() ?? "";
+        if (string.IsNullOrEmpty(roomName)) return false;
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
-        await Clients.Group(groupName).ReceiveMessage(Context.ConnectionId, " joined the group successfully");
-        Console.WriteLine($"{Context.ConnectionId} joined the group {groupName}");
+        var room = await db.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.Name == roomName);
+        if (room is null) return false;
+
+        if (!IsAuthorized(room, code, password))
+            return false;
+
+        var set = Access.GetOrAdd(Context.ConnectionId, _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+        set[roomName] = 0;
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
+        await Clients.OthersInGroup(roomName).UserJoined(Username);
+        return true;
     }
 
-    public async Task LeaveGroup(string groupName)
+    public async Task LeaveRoom(string roomName)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
-        await Clients.Group(groupName).ReceiveMessage(Context.ConnectionId, " left the group successfully");
-        Console.WriteLine($"{Context.ConnectionId} left the group {groupName}");
+        roomName = roomName.Trim();
+        if (Access.TryGetValue(Context.ConnectionId, out var set))
+            set.TryRemove(roomName, out _);
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomName);
+        await Clients.OthersInGroup(roomName).UserLeft(Username);
     }
 
-    public async Task SendMessage(string groupName, string message)
+    public async Task SendMessage(string roomName, string message)
     {
-        if (!_messages.ContainsKey(groupName))
-            _messages[groupName] = [];
+        roomName = roomName.Trim();
+        message = message?.Trim() ?? "";
+        if (string.IsNullOrEmpty(roomName) || string.IsNullOrEmpty(message)) return;
+        if (!HasAccess(roomName)) return;
 
-        var user = Context.ConnectionId[..Math.Min(6, Context.ConnectionId.Length)];
-        var chatMessage = new ChatMessage(user, message);
-        _messages[groupName].Add(chatMessage);
+        var room = await db.Rooms.FirstOrDefaultAsync(r => r.Name == roomName);
+        if (room is null) return;
 
-        await Clients.Group(groupName).ReceiveMessage(user, message);
+        var at = DateTimeOffset.UtcNow;
+        db.Messages.Add(new ChatMessageEntity
+        {
+            RoomId = room.Id,
+            Username = Username,
+            Message = message,
+            At = at
+        });
+        await db.SaveChangesAsync();
+
+        await Clients.Group(roomName).ReceiveMessage(Username, message, at.ToString("o"));
+        await Clients.OthersInGroup(roomName).UserTyping(Username, false);
     }
 
-    public Task<List<ChatMessage>> GetMessages(string groupName)
+    public async Task Typing(string roomName, bool isTyping)
     {
-        if (!_messages.TryGetValue(groupName, out var list))
-            return Task.FromResult(new List<ChatMessage>());
+        roomName = roomName.Trim();
+        if (!HasAccess(roomName)) return;
+        await Clients.OthersInGroup(roomName).UserTyping(Username, isTyping);
+    }
 
-        return Task.FromResult(list);
+    public async Task<List<object>> GetMessages(string roomName)
+    {
+        roomName = roomName.Trim();
+        if (!HasAccess(roomName)) return [];
+
+        var room = await db.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.Name == roomName);
+        if (room is null) return [];
+
+        return await db.Messages
+            .AsNoTracking()
+            .Where(m => m.RoomId == room.Id)
+            .OrderBy(m => m.At)
+            .Select(m => (object)new
+            {
+                user = m.Username,
+                message = m.Message,
+                at = m.At.ToString("o")
+            })
+            .ToListAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        Access.TryRemove(Context.ConnectionId, out _);
+        return base.OnDisconnectedAsync(exception);
+    }
+
+    private bool HasAccess(string roomName) =>
+        Access.TryGetValue(Context.ConnectionId, out var set) && set.ContainsKey(roomName);
+
+    private static bool IsAuthorized(RoomEntity room, string? code, string? password)
+    {
+        var hasPassword = !string.IsNullOrEmpty(room.PasswordHash);
+        var codeOk = !string.IsNullOrWhiteSpace(code)
+            && code.Trim().Equals(room.InviteCode, StringComparison.OrdinalIgnoreCase);
+        var passwordOk = hasPassword
+            && !string.IsNullOrEmpty(password)
+            && PasswordHelper.Verify(password, room.PasswordHash!);
+
+        if (hasPassword)
+            return passwordOk && (codeOk || true); // كلمة السر كافية مع معرفة الاسم بعد /api/rooms/join
+        return codeOk;
     }
 }

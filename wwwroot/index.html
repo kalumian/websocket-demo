@@ -1,242 +1,544 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIGNAL R</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>خلوة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <style>
+    :root {
+      --ink: #1c1917;
+      --brand: #0f766e;
+      --brand-deep: #115e59;
+      --sand: #f5f0e8;
+      --card: #fffdf9;
+      --line: #e7e0d4;
+      --mute: #78716c;
+      --mine: #0f766e;
+      --theirs: #ffffff;
+      --danger: #b91c1c;
+      --shadow: 0 12px 32px rgba(28, 25, 23, 0.08);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: "IBM Plex Sans Arabic", Cairo, sans-serif; color: var(--ink);
+      background: radial-gradient(circle at 0% 0%, #e7f3f0, transparent 42%),
+                  radial-gradient(circle at 100% 10%, #f3ebe0, transparent 40%),
+                  linear-gradient(180deg, #f7f3ec, #eef6f3); }
+    body { display: grid; place-items: center; }
+    .app { width: min(440px, 100%); height: 100dvh; background: var(--sand); box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    .screen { display: none; flex: 1; flex-direction: column; min-height: 0; }
+    .screen.active { display: flex; }
+
+    .brand { display: flex; align-items: center; gap: .75rem; }
+    .logo { width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(145deg, var(--brand), var(--brand-deep)); color: #fff; display: grid; place-items: center; box-shadow: 0 8px 18px rgba(15,118,110,.28); }
+    .brand h1 { margin: 0; font-family: Cairo, sans-serif; font-size: 1.4rem; }
+    .brand p { margin: .15rem 0 0; color: var(--mute); font-size: .86rem; }
+
+    #authScreen, #homeScreen { padding: 1.2rem; justify-content: center; gap: 1rem; }
+    .card { background: rgba(255,253,249,.92); border: 1px solid var(--line); border-radius: 22px; padding: 1.1rem; box-shadow: var(--shadow); }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; background: #ebe4d8; padding: .28rem; border-radius: 14px; margin: .9rem 0; }
+    .tabs button { border: 0; background: transparent; padding: .7rem; border-radius: 11px; font: inherit; font-weight: 600; color: #57534e; cursor: pointer; }
+    .tabs button.active { background: #fff; color: var(--brand); box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    label { display: block; margin: .7rem 0 .3rem; font-size: .9rem; color: #57534e; font-weight: 500; }
+    input, textarea { width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: .85rem .95rem; font: inherit; outline: none; }
+    input:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+    .primary { width: 100%; margin-top: 1rem; border: 0; border-radius: 14px; padding: .95rem; background: linear-gradient(135deg, var(--brand), var(--brand-deep)); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    .hint { margin-top: .8rem; font-size: .8rem; color: var(--mute); text-align: center; line-height: 1.5; }
+    .error { color: var(--danger); font-size: .85rem; min-height: 1.2rem; margin-top: .5rem; text-align: center; }
+
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .85rem 1rem; background: rgba(255,253,249,.92); border-bottom: 1px solid var(--line); }
+    .icon-btn { border: 0; background: #ebe4d8; color: var(--brand-deep); width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; cursor: pointer; }
+    .home-body { flex: 1; overflow: auto; padding: 1rem; display: flex; flex-direction: column; gap: .9rem; }
+    .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+    .mode-card { border: 1px solid var(--line); background: var(--card); border-radius: 18px; padding: 1rem .85rem; text-align: center; cursor: pointer; }
+    .mode-card.active { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+    .mode-card strong { display: block; margin-top: .35rem; }
+    .mode-card span { color: var(--mute); font-size: .78rem; }
+    .result-box { margin-top: .9rem; padding: .9rem; border-radius: 14px; background: #ecfdf5; border: 1px dashed #99f6e4; display: none; }
+    .result-box.show { display: block; }
+    .code { font-family: Cairo, sans-serif; font-size: 1.6rem; letter-spacing: .2em; font-weight: 700; color: var(--brand-deep); text-align: center; margin: .4rem 0; }
+    .saved { display: flex; flex-direction: column; gap: .55rem; }
+    .saved button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: .8rem; text-align: right; font: inherit; cursor: pointer; }
+    .saved button small { color: var(--mute); display: block; margin-top: .2rem; }
+
+    .messages { flex: 1; overflow: auto; padding: 1rem .9rem; display: flex; flex-direction: column; gap: .65rem; }
+    .bubble { max-width: 82%; padding: .7rem .85rem .55rem; border-radius: 18px; line-height: 1.55; animation: rise .2s ease; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none;} }
+    .bubble.mine { align-self: flex-start; background: var(--mine); color: #fff; border-bottom-right-radius: 6px; }
+    .bubble.theirs { align-self: flex-end; background: var(--theirs); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+    .bubble .who { display: block; font-size: .75rem; font-weight: 700; margin-bottom: .15rem; opacity: .85; }
+    .bubble .time { display: block; text-align: left; font-size: .7rem; opacity: .7; margin-top: .25rem; }
+    .system { align-self: center; color: var(--mute); font-size: .8rem; }
+    .typing { min-height: 1.3rem; padding: 0 1rem; color: var(--mute); font-size: .82rem; }
+    .composer { display: flex; gap: .5rem; align-items: flex-end; padding: .7rem .8rem calc(.7rem + var(--safe-bottom)); background: rgba(255,253,249,.95); border-top: 1px solid var(--line); }
+    .composer textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; }
+    .send-btn { width: 48px; height: 48px; border: 0; border-radius: 16px; background: linear-gradient(135deg, var(--brand), var(--brand-deep)); color: #fff; display: grid; place-items: center; cursor: pointer; }
+    .toast { position: absolute; inset-inline: 1rem; top: 1rem; background: var(--ink); color: #fff; padding: .75rem 1rem; border-radius: 14px; z-index: 20; transform: translateY(-140%); transition: .25s; text-align: center; }
+    .toast.show { transform: none; }
+    .field-note { font-size: .78rem; color: var(--mute); margin-top: .25rem; }
+  </style>
 </head>
 <body>
-    <section>
-        <h3>Auth</h3>
-        <button id="cookieLoginBtn">Cookie Login</button>
-        <button id="cookieLogoutBtn">Cookie Logout</button>
-        <button id="jwtLoginBtn">JWT Login</button>
-        <button id="jwtRefreshBtn">JWT Refresh</button>
-        <button id="jwtLogoutBtn">JWT Logout</button>
-        <pre id="authLog"></pre>
+  <div class="app">
+    <div id="toast" class="toast"></div>
+
+    <section id="authScreen" class="screen active">
+      <div class="brand" style="justify-content:center;flex-direction:column;text-align:center;gap:.35rem;">
+        <div class="logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 4v5c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V7l7-4z"/><path d="M9.5 12h5"/></svg>
+        </div>
+        <div><h1>خلوة</h1><p>غرف خاصة بالكود أو كلمة السر</p></div>
+      </div>
+      <div class="card">
+        <div class="tabs">
+          <button type="button" id="tabLogin" class="active">دخول</button>
+          <button type="button" id="tabRegister">حساب جديد</button>
+        </div>
+        <form id="authForm">
+          <label for="username">اسم المستخدم</label>
+          <input id="username" required maxlength="24" placeholder="مثال: أحمد" />
+          <label for="password">كلمة المرور</label>
+          <input id="password" type="password" required minlength="4" placeholder="٤ أحرف على الأقل" />
+          <button class="primary" id="authSubmit" type="submit">دخول</button>
+          <div class="error" id="authError"></div>
+          <p class="hint">تجريبي: أحمد / 123456 — غرفة تقنية سرها 1234</p>
+        </form>
+      </div>
     </section>
 
-    <hr>
+    <section id="homeScreen" class="screen">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo" style="width:38px;height:38px;border-radius:12px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 4v5c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V7l7-4z"/></svg>
+          </div>
+          <div><h1 style="font-size:1.1rem;">خلوة</h1><p id="welcomeUser">مرحباً</p></div>
+        </div>
+        <button class="icon-btn" id="logoutBtn" type="button" title="خروج">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </header>
 
-    <section>
-        <h3>SignalR</h3>
-        <button id="connectBtn">Connect</button>
-        <button id="disconnectBtn" disabled>Disconnect</button>
-        <span id="hubStatus">Disconnected</span>
+      <div class="home-body">
+        <div class="mode-grid">
+          <button type="button" class="mode-card active" id="modeCreate">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+            <strong>إنشاء غرفة</strong>
+            <span>كود دعوة + سر اختياري</span>
+          </button>
+          <button type="button" class="mode-card" id="modeJoin">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+            <strong>انضمام</strong>
+            <span>بكود أو اسم + سر</span>
+          </button>
+        </div>
+
+        <div class="card" id="createPanel">
+          <label for="createName">اسم الغرفة</label>
+          <input id="createName" maxlength="40" placeholder="مثال: فريق العمل" />
+          <label for="createPass">كلمة سر الغرفة (اختياري)</label>
+          <input id="createPass" type="password" placeholder="اتركها فارغة إن أردت الكود فقط" />
+          <p class="field-note">سيُنشأ كود دعوة تلقائياً للمشاركة بخصوصية.</p>
+          <button class="primary" type="button" id="createBtn">إنشاء الغرفة</button>
+          <div class="result-box" id="createResult">
+            <div style="text-align:center;color:var(--mute);font-size:.85rem;">كود الدعوة</div>
+            <div class="code" id="createdCode">------</div>
+            <p class="hint" id="createdHint" style="margin:0;"></p>
+            <button class="primary" type="button" id="enterCreatedBtn">دخول الغرفة الآن</button>
+          </div>
+          <div class="error" id="createError"></div>
+        </div>
+
+        <div class="card" id="joinPanel" style="display:none;">
+          <label for="joinCode">كود الدعوة</label>
+          <input id="joinCode" maxlength="12" placeholder="مثال: K7M2QX" style="text-transform:uppercase;letter-spacing:.12em;" />
+          <label for="joinName">أو اسم الغرفة</label>
+          <input id="joinName" maxlength="40" placeholder="إن كنت تعرف الاسم" />
+          <label for="joinPass">كلمة سر الغرفة (إن وُجدت)</label>
+          <input id="joinPass" type="password" placeholder="مطلوبة للغرف المحمية" />
+          <button class="primary" type="button" id="joinBtn">انضمام</button>
+          <div class="error" id="joinError"></div>
+        </div>
+
+        <div>
+          <div style="margin-bottom:.45rem;color:var(--mute);font-size:.85rem;">غرف محفوظة على جهازك</div>
+          <div class="saved" id="savedRooms"></div>
+        </div>
+      </div>
     </section>
 
-    <label for="Group">Group</label>
-    <input type="text" id="Group">
-    <button id="Join" disabled>Join</button>
-    <button id="Leave" disabled>Leave</button>
+    <section id="chatScreen" class="screen">
+      <header class="topbar">
+        <button class="icon-btn" id="backBtn" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+        <div style="min-width:0;text-align:center;flex:1;">
+          <strong id="roomTitle" style="display:block;">غرفة</strong>
+          <small id="roomSub" style="color:var(--mute);">متصل</small>
+        </div>
+        <div style="width:40px;"></div>
+      </header>
+      <div class="messages" id="messages"></div>
+      <div class="typing" id="typing"></div>
+      <form class="composer" id="composer">
+        <textarea id="messageInput" rows="1" placeholder="اكتب رسالتك..." maxlength="1000"></textarea>
+        <button class="send-btn" id="sendBtn" type="submit">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.6 21 12 3.4 3.4 3 10.3 14 12 3 13.7z"/></svg>
+        </button>
+      </form>
+    </section>
+  </div>
 
-    <table id="messages">
-        <thead>
-            <tr>
-                <th>User</th>
-                <th>Message</th>
-            </tr>
-        </thead>
-        <tbody id="messagesBody"></tbody>
-        <tfoot>
-            <tr>
-                <td colspan="2">
-                    <input type="text" id="Message">
-                    <button id="Send" disabled>Send</button>
-                </td>
-            </tr>
-        </tfoot>
-    </table>
+  <script>
+    const state = {
+      username: "",
+      room: "",
+      code: "",
+      password: "",
+      mode: "login",
+      typingUsers: new Set(),
+      typingTimer: null,
+      connection: null,
+      lastCreated: null
+    };
 
-    <script>
-        const authLog = document.getElementById("authLog");
+    const $ = (id) => document.getElementById(id);
+    const SAVED_KEY = "khalwa_rooms";
 
-        function logAuth(data) {
-            console.log(data);
-            authLog.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-        }
+    function showToast(text) {
+      const el = $("toast");
+      el.textContent = text;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2200);
+    }
 
-        // ===== Cookies =====
-        async function cookieLogin() {
-            const res = await fetch("/auth/cookies/login", { credentials: "include" });
-            const text = await res.text();
-            logAuth(text);
-            return text;
-        }
+    function showScreen(name) {
+      ["authScreen", "homeScreen", "chatScreen"].forEach(id => $(id).classList.remove("active"));
+      $(name).classList.add("active");
+    }
 
-        async function cookieLogout() {
-            const res = await fetch("/auth/cookies/logout", { credentials: "include" });
-            const data = await res.json();
-            logAuth(data);
-            return data;
-        }
+    async function api(url, options = {}, retried = false) {
+      const res = await fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+      });
+      if (res.status === 401 && !retried && !url.includes("/auth/")) {
+        const refreshed = await fetch("/auth/refresh", { method: "POST", credentials: "include" });
+        if (refreshed.ok) return api(url, options, true);
+        showScreen("authScreen");
+      }
+      return res;
+    }
 
-        // ===== JWT (HttpOnly cookies) =====
-        async function jwtLogin() {
-            const res = await fetch("/auth/jwt/login", { credentials: "include" });
-            const data = await res.json();
-            logAuth(data);
-            return data;
-        }
+    function getSavedRooms() {
+      try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); }
+      catch { return []; }
+    }
 
-        async function jwtRefresh() {
-            const res = await fetch("/auth/jwt/refresh", { credentials: "include" });
-            const data = await res.json();
-            logAuth(data);
-            return res.ok;
-        }
+    function saveRoomLocal(entry) {
+      const list = getSavedRooms().filter(r => r.name !== entry.name);
+      list.unshift(entry);
+      localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, 12)));
+      renderSaved();
+    }
 
-        async function jwtLogout() {
-            const res = await fetch("/auth/jwt/logout", { credentials: "include" });
-            const data = await res.json();
-            logAuth(data);
-            return data;
-        }
-
-        // عند 401: جرّب refresh مرة واحدة فقط، ثم أعد الطلب، وإلا خروج
-        async function fetchWithJwt(url, options = {}, alreadyRetried = false) {
-            const res = await fetch(url, {
-                ...options,
-                credentials: "include"
-            });
-
-            if (res.status !== 401) return res;
-
-            if (alreadyRetried) {
-                await jwtLogout();
-                logAuth("انتهت الجلسة بعد فشل التجديد");
-                return res;
-            }
-
-            const refreshed = await jwtRefresh();
-            if (!refreshed) {
-                await jwtLogout();
-                return res;
-            }
-
-            return fetchWithJwt(url, options, true);
-        }
-
-        document.getElementById("cookieLoginBtn").onclick = () => cookieLogin().catch(logAuth);
-        document.getElementById("cookieLogoutBtn").onclick = () => cookieLogout().catch(logAuth);
-        document.getElementById("jwtLoginBtn").onclick = () => jwtLogin().catch(logAuth);
-        document.getElementById("jwtRefreshBtn").onclick = () => jwtRefresh().catch(logAuth);
-        document.getElementById("jwtLogoutBtn").onclick = () => jwtLogout().catch(logAuth);
-
-        // ===== SignalR =====
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/chatHub")
-            .withAutomaticReconnect()
-            .build();
-
-        const messagesBody = document.getElementById("messagesBody");
-        const hubStatus = document.getElementById("hubStatus");
-        const connectBtn = document.getElementById("connectBtn");
-        const disconnectBtn = document.getElementById("disconnectBtn");
-        const joinBtn = document.getElementById("Join");
-        const leaveBtn = document.getElementById("Leave");
-        const sendBtn = document.getElementById("Send");
-
-        function setConnectedUi(isConnected) {
-            hubStatus.textContent = isConnected ? "Connected" : "Disconnected";
-            connectBtn.disabled = isConnected;
-            disconnectBtn.disabled = !isConnected;
-            joinBtn.disabled = !isConnected;
-            leaveBtn.disabled = !isConnected;
-            sendBtn.disabled = !isConnected;
-        }
-
-        function ensureConnected() {
-            if (connection.state !== signalR.HubConnectionState.Connected) {
-                logAuth("الاتصال غير جاهز. اضغط Connect أولاً.");
-                return false;
-            }
-            return true;
-        }
-
-        function addRow(user, message) {
-            messagesBody.innerHTML += `<tr><td>${user}</td><td>${message}</td></tr>`;
-        }
-
-        connection.on("ReceiveMessage", (user, message) => {
-            addRow(user, message);
-        });
-
-        connection.onreconnected(() => setConnectedUi(true));
-        connection.onclose(() => setConnectedUi(false));
-
-        connectBtn.onclick = async () => {
-            if (connection.state !== signalR.HubConnectionState.Disconnected) return;
-
-            try {
-                await connection.start();
-                setConnectedUi(true);
-                logAuth("Connected to /chatHub");
-            } catch (err) {
-                setConnectedUi(false);
-                logAuth(err.toString());
-            }
+    function renderSaved() {
+      const box = $("savedRooms");
+      const list = getSavedRooms();
+      if (!list.length) {
+        box.innerHTML = `<div class="hint" style="text-align:right;margin:0;">لا توجد غرف محفوظة بعد.</div>`;
+        return;
+      }
+      box.innerHTML = "";
+      list.forEach(item => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.innerHTML = `<strong>${escapeHtml(item.name)}</strong><small>كود: ${escapeHtml(item.code || "—")}${item.hasPassword ? " · محمية" : ""}</small>`;
+        btn.onclick = () => {
+          $("modeJoin").click();
+          $("joinCode").value = item.code || "";
+          $("joinName").value = item.name || "";
+          $("joinPass").value = "";
+          $("joinPass").focus();
         };
+        box.appendChild(btn);
+      });
+    }
 
-        disconnectBtn.onclick = async () => {
-            try {
-                await connection.stop();
-                setConnectedUi(false);
-                logAuth("Disconnected");
-            } catch (err) {
-                logAuth(err.toString());
-            }
-        };
+    function formatTime(iso) {
+      try {
+        return new Intl.DateTimeFormat("ar", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+      } catch { return ""; }
+    }
 
-        joinBtn.onclick = async () => {
-            if (!ensureConnected()) return;
+    function escapeHtml(text) {
+      return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
 
-            const groupName = document.getElementById("Group").value.trim();
-            if (!groupName) return;
+    $("tabLogin").onclick = () => {
+      state.mode = "login";
+      $("tabLogin").classList.add("active");
+      $("tabRegister").classList.remove("active");
+      $("authSubmit").textContent = "دخول";
+    };
+    $("tabRegister").onclick = () => {
+      state.mode = "register";
+      $("tabRegister").classList.add("active");
+      $("tabLogin").classList.remove("active");
+      $("authSubmit").textContent = "إنشاء حساب";
+    };
 
-            try {
-                await connection.invoke("JoinGroup", groupName);
-                const messages = await connection.invoke("GetMessages", groupName);
-                messagesBody.innerHTML = "";
-                messages.forEach((item) => addRow(item.user, item.message));
-            } catch (err) {
-                console.log(err);
-                logAuth(err.toString());
-            }
-        };
+    $("authForm").onsubmit = async (e) => {
+      e.preventDefault();
+      $("authError").textContent = "";
+      const username = $("username").value.trim();
+      const password = $("password").value;
+      const url = state.mode === "login" ? "/auth/login" : "/auth/register";
+      try {
+        const res = await api(url, { method: "POST", body: JSON.stringify({ username, password }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          $("authError").textContent = data.message || (res.status === 401 ? "بيانات الدخول غير صحيحة" : "تعذر إتمام العملية");
+          return;
+        }
+        state.username = data.username || username;
+        $("welcomeUser").textContent = `أهلاً، ${state.username}`;
+        await ensureHub();
+        renderSaved();
+        showScreen("homeScreen");
+        showToast(data.message || "تم بنجاح");
+      } catch {
+        $("authError").textContent = "تعذر الاتصال بالخادم";
+      }
+    };
 
-        leaveBtn.onclick = async () => {
-            if (!ensureConnected()) return;
+    $("logoutBtn").onclick = async () => {
+      if (state.room && state.connection) {
+        try { await state.connection.invoke("LeaveRoom", state.room); } catch {}
+      }
+      if (state.connection) {
+        try { await state.connection.stop(); } catch {}
+        state.connection = null;
+      }
+      await api("/auth/logout", { method: "POST" });
+      showScreen("authScreen");
+    };
 
-            const groupName = document.getElementById("Group").value.trim();
-            if (!groupName) return;
+    $("modeCreate").onclick = () => {
+      $("modeCreate").classList.add("active");
+      $("modeJoin").classList.remove("active");
+      $("createPanel").style.display = "block";
+      $("joinPanel").style.display = "none";
+    };
+    $("modeJoin").onclick = () => {
+      $("modeJoin").classList.add("active");
+      $("modeCreate").classList.remove("active");
+      $("createPanel").style.display = "none";
+      $("joinPanel").style.display = "block";
+    };
 
-            try {
-                await connection.invoke("LeaveGroup", groupName);
-                document.getElementById("Group").value = "";
-                messagesBody.innerHTML = "";
-            } catch (err) {
-                console.log(err);
-                logAuth(err.toString());
-            }
-        };
+    $("createBtn").onclick = async () => {
+      $("createError").textContent = "";
+      const name = $("createName").value.trim();
+      const password = $("createPass").value;
+      const res = await api("/api/rooms/create", {
+        method: "POST",
+        body: JSON.stringify({ name, password: password || null })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        $("createError").textContent = data.message || "تعذر إنشاء الغرفة";
+        return;
+      }
+      state.lastCreated = { name: data.name, code: data.code, password, hasPassword: !!data.hasPassword };
+      $("createdCode").textContent = data.code;
+      $("createdHint").textContent = data.hasPassword
+        ? "الغرفة محمية بكلمة سر. شارك الكود والسر مع المدعوين فقط."
+        : "شارك هذا الكود لمن تريد انضمامه.";
+      $("createResult").classList.add("show");
+      saveRoomLocal({ name: data.name, code: data.code, hasPassword: !!data.hasPassword });
+      showToast("تم إنشاء الغرفة");
+    };
 
-        sendBtn.onclick = async () => {
-            if (!ensureConnected()) return;
+    $("enterCreatedBtn").onclick = async () => {
+      if (!state.lastCreated) return;
+      await enterRoom(state.lastCreated.name, state.lastCreated.code, state.lastCreated.password || "");
+    };
 
-            const groupName = document.getElementById("Group").value.trim();
-            const message = document.getElementById("Message").value.trim();
-            if (!groupName || !message) return;
+    $("joinBtn").onclick = async () => {
+      $("joinError").textContent = "";
+      const code = $("joinCode").value.trim().toUpperCase();
+      const name = $("joinName").value.trim();
+      const password = $("joinPass").value;
+      if (!code && !name) {
+        $("joinError").textContent = "أدخل كود الدعوة أو اسم الغرفة";
+        return;
+      }
+      const res = await api("/api/rooms/join", {
+        method: "POST",
+        body: JSON.stringify({ code: code || null, name: name || null, password: password || null })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        $("joinError").textContent = data.message || "تعذر الانضمام";
+        return;
+      }
+      saveRoomLocal({ name: data.name, code: data.code, hasPassword: !!data.hasPassword });
+      await enterRoom(data.name, data.code, password || "");
+    };
 
-            try {
-                await connection.invoke("SendMessage", groupName, message);
-                document.getElementById("Message").value = "";
-            } catch (err) {
-                console.log(err);
-                logAuth(err.toString());
-            }
-        };
-    </script>
+    async function ensureHub() {
+      if (state.connection?.state === signalR.HubConnectionState.Connected) return state.connection;
+      if (state.connection) { try { await state.connection.stop(); } catch {} }
+
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/chatHub")
+        .withAutomaticReconnect()
+        .build();
+
+      connection.on("ReceiveMessage", (user, message, at) => appendMessage(user, message, at));
+      connection.on("UserTyping", (user, isTyping) => {
+        if (isTyping) state.typingUsers.add(user); else state.typingUsers.delete(user);
+        renderTyping();
+      });
+      connection.on("UserJoined", (user) => appendSystem(`${user} انضم إلى الخلوة`));
+      connection.on("UserLeft", (user) => appendSystem(`${user} غادر`));
+      connection.onreconnected(async () => {
+        if (state.room) {
+          await connection.invoke("JoinRoom", state.room, state.code, state.password || null);
+          $("roomSub").textContent = "متصل";
+        }
+      });
+      connection.onclose(() => { $("roomSub").textContent = "غير متصل"; });
+
+      await connection.start();
+      state.connection = connection;
+      return connection;
+    }
+
+    async function enterRoom(name, code, password) {
+      await ensureHub();
+      if (state.room) {
+        try { await state.connection.invoke("LeaveRoom", state.room); } catch {}
+      }
+
+      const ok = await state.connection.invoke("JoinRoom", name, code || null, password || null);
+      if (!ok) {
+        showToast("رفض الدخول — تحقق من الكود أو كلمة السر");
+        return;
+      }
+
+      state.room = name;
+      state.code = code || "";
+      state.password = password || "";
+      state.typingUsers.clear();
+      renderTyping();
+      $("roomTitle").textContent = name;
+      $("roomSub").textContent = code ? `كود: ${code}` : "متصل";
+      $("messages").innerHTML = "";
+
+      const history = await state.connection.invoke("GetMessages", name);
+      history.forEach(m => appendMessage(m.user, m.message, m.at, false));
+      showScreen("chatScreen");
+      scrollMessages();
+    }
+
+    $("backBtn").onclick = async () => {
+      if (state.room && state.connection) {
+        try { await state.connection.invoke("LeaveRoom", state.room); } catch {}
+      }
+      state.room = "";
+      state.typingUsers.clear();
+      renderTyping();
+      renderSaved();
+      showScreen("homeScreen");
+    };
+
+    function appendMessage(user, message, at, animate = true) {
+      const mine = user === state.username;
+      const el = document.createElement("div");
+      el.className = `bubble ${mine ? "mine" : "theirs"}`;
+      if (!animate) el.style.animation = "none";
+      el.innerHTML = `${mine ? "" : `<span class="who">${escapeHtml(user)}</span>`}<div>${escapeHtml(message)}</div><span class="time">${formatTime(at)}</span>`;
+      $("messages").appendChild(el);
+      scrollMessages();
+    }
+
+    function appendSystem(text) {
+      const el = document.createElement("div");
+      el.className = "system";
+      el.textContent = text;
+      $("messages").appendChild(el);
+      scrollMessages();
+    }
+
+    function renderTyping() {
+      const others = [...state.typingUsers].filter(u => u !== state.username);
+      $("typing").textContent = others.length
+        ? (others.length === 1 ? `${others[0]} يكتب...` : "عدة أشخاص يكتبون...")
+        : "";
+    }
+
+    function scrollMessages() {
+      const box = $("messages");
+      box.scrollTop = box.scrollHeight;
+    }
+
+    let typingSent = false;
+    $("messageInput").addEventListener("input", () => {
+      const ta = $("messageInput");
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+      if (!state.room || !state.connection) return;
+      if (!typingSent) {
+        typingSent = true;
+        state.connection.invoke("Typing", state.room, true).catch(() => {});
+      }
+      clearTimeout(state.typingTimer);
+      state.typingTimer = setTimeout(() => {
+        typingSent = false;
+        state.connection.invoke("Typing", state.room, false).catch(() => {});
+      }, 1200);
+    });
+
+    $("composer").onsubmit = async (e) => {
+      e.preventDefault();
+      const text = $("messageInput").value.trim();
+      if (!text || !state.room) return;
+      $("sendBtn").disabled = true;
+      try {
+        await state.connection.invoke("SendMessage", state.room, text);
+        $("messageInput").value = "";
+        $("messageInput").style.height = "auto";
+        typingSent = false;
+        await state.connection.invoke("Typing", state.room, false);
+      } catch {
+        showToast("تعذر إرسال الرسالة");
+      } finally {
+        $("sendBtn").disabled = false;
+        $("messageInput").focus();
+      }
+    };
+
+    (async () => {
+      const res = await api("/auth/me");
+      if (!res.ok) return;
+      const data = await res.json();
+      state.username = data.username;
+      $("welcomeUser").textContent = `أهلاً، ${state.username}`;
+      await ensureHub();
+      renderSaved();
+      showScreen("homeScreen");
+    })();
+  </script>
 </body>
 </html>
