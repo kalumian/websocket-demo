@@ -63,15 +63,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // جداول جديدة إن لم تكن موجودة
-    await db.Database.EnsureCreatedAsync();
-
-    // ترقية أعمدة الخصوصية إن كان الجدول قديماً
-    await db.Database.ExecuteSqlRawAsync("""
-        ALTER TABLE "Rooms" ADD COLUMN IF NOT EXISTS "InviteCode" character varying(16) NOT NULL DEFAULT '';
-        ALTER TABLE "Rooms" ADD COLUMN IF NOT EXISTS "PasswordHash" character varying(128) NULL;
-        ALTER TABLE "Rooms" ADD COLUMN IF NOT EXISTS "CreatedBy" character varying(64) NOT NULL DEFAULT '';
-        """);
+    // إنشاء/تحديث الجداول عبر Migrations (يعمل حتى لو كانت قاعدة Neon موجودة وفارغة)
+    await db.Database.MigrateAsync();
 
     if (!await db.Users.AnyAsync())
     {
@@ -80,7 +73,6 @@ using (var scope = app.Services.CreateScope())
             new UserEntity { Username = "سارة", PasswordHash = PasswordHelper.Hash("123456") });
     }
 
-    // إصلاح الغرف بدون كود + بذور أولية
     var rooms = await db.Rooms.ToListAsync();
     foreach (var room in rooms.Where(r => string.IsNullOrWhiteSpace(r.InviteCode)))
         room.InviteCode = await UniqueCodeAsync(db);
