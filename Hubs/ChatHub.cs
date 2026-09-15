@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 public interface IChatHub
@@ -7,6 +8,7 @@ public interface IChatHub
 
 public record ChatMessage(string User, string Message);
 
+[Authorize(AuthenticationSchemes = "Cookies,Bearer")]
 public class ChatHub(Dictionary<string, List<ChatMessage>> messages) : Hub<IChatHub>
 {
     private readonly Dictionary<string, List<ChatMessage>> _messages = messages;

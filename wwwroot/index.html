@@ -7,10 +7,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
 </head>
 <body>
+    <section>
+        <h3>Auth</h3>
+        <button id="cookieLoginBtn">Cookie Login</button>
+        <button id="cookieLogoutBtn">Cookie Logout</button>
+        <button id="jwtLoginBtn">JWT Login</button>
+        <button id="jwtRefreshBtn">JWT Refresh</button>
+        <button id="jwtLogoutBtn">JWT Logout</button>
+        <pre id="authLog"></pre>
+    </section>
+
+    <hr>
+
+    <section>
+        <h3>SignalR</h3>
+        <button id="connectBtn">Connect</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+        <span id="hubStatus">Disconnected</span>
+    </section>
+
     <label for="Group">Group</label>
     <input type="text" id="Group">
-    <button id="Join">Join</button>
-    <button id="Leave">Leave</button>
+    <button id="Join" disabled>Join</button>
+    <button id="Leave" disabled>Leave</button>
 
     <table id="messages">
         <thead>
@@ -24,18 +43,117 @@
             <tr>
                 <td colspan="2">
                     <input type="text" id="Message">
-                    <button id="Send">Send</button>
+                    <button id="Send" disabled>Send</button>
                 </td>
             </tr>
         </tfoot>
     </table>
 
     <script>
+        const authLog = document.getElementById("authLog");
+
+        function logAuth(data) {
+            console.log(data);
+            authLog.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        }
+
+        // ===== Cookies =====
+        async function cookieLogin() {
+            const res = await fetch("/auth/cookies/login", { credentials: "include" });
+            const text = await res.text();
+            logAuth(text);
+            return text;
+        }
+
+        async function cookieLogout() {
+            const res = await fetch("/auth/cookies/logout", { credentials: "include" });
+            const data = await res.json();
+            logAuth(data);
+            return data;
+        }
+
+        // ===== JWT (HttpOnly cookies) =====
+        async function jwtLogin() {
+            const res = await fetch("/auth/jwt/login", { credentials: "include" });
+            const data = await res.json();
+            logAuth(data);
+            return data;
+        }
+
+        async function jwtRefresh() {
+            const res = await fetch("/auth/jwt/refresh", { credentials: "include" });
+            const data = await res.json();
+            logAuth(data);
+            return res.ok;
+        }
+
+        async function jwtLogout() {
+            const res = await fetch("/auth/jwt/logout", { credentials: "include" });
+            const data = await res.json();
+            logAuth(data);
+            return data;
+        }
+
+        // عند 401: جرّب refresh مرة واحدة فقط، ثم أعد الطلب، وإلا خروج
+        async function fetchWithJwt(url, options = {}, alreadyRetried = false) {
+            const res = await fetch(url, {
+                ...options,
+                credentials: "include"
+            });
+
+            if (res.status !== 401) return res;
+
+            if (alreadyRetried) {
+                await jwtLogout();
+                logAuth("انتهت الجلسة بعد فشل التجديد");
+                return res;
+            }
+
+            const refreshed = await jwtRefresh();
+            if (!refreshed) {
+                await jwtLogout();
+                return res;
+            }
+
+            return fetchWithJwt(url, options, true);
+        }
+
+        document.getElementById("cookieLoginBtn").onclick = () => cookieLogin().catch(logAuth);
+        document.getElementById("cookieLogoutBtn").onclick = () => cookieLogout().catch(logAuth);
+        document.getElementById("jwtLoginBtn").onclick = () => jwtLogin().catch(logAuth);
+        document.getElementById("jwtRefreshBtn").onclick = () => jwtRefresh().catch(logAuth);
+        document.getElementById("jwtLogoutBtn").onclick = () => jwtLogout().catch(logAuth);
+
+        // ===== SignalR =====
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/chatHub")
+            .withAutomaticReconnect()
             .build();
 
         const messagesBody = document.getElementById("messagesBody");
+        const hubStatus = document.getElementById("hubStatus");
+        const connectBtn = document.getElementById("connectBtn");
+        const disconnectBtn = document.getElementById("disconnectBtn");
+        const joinBtn = document.getElementById("Join");
+        const leaveBtn = document.getElementById("Leave");
+        const sendBtn = document.getElementById("Send");
+
+        function setConnectedUi(isConnected) {
+            hubStatus.textContent = isConnected ? "Connected" : "Disconnected";
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            joinBtn.disabled = !isConnected;
+            leaveBtn.disabled = !isConnected;
+            sendBtn.disabled = !isConnected;
+        }
+
+        function ensureConnected() {
+            if (connection.state !== signalR.HubConnectionState.Connected) {
+                logAuth("الاتصال غير جاهز. اضغط Connect أولاً.");
+                return false;
+            }
+            return true;
+        }
 
         function addRow(user, message) {
             messagesBody.innerHTML += `<tr><td>${user}</td><td>${message}</td></tr>`;
@@ -44,26 +162,53 @@
         connection.on("ReceiveMessage", (user, message) => {
             addRow(user, message);
         });
-        connection.start()
-            .then(() => console.log("Connected to the hub"))
-            .catch((err) => console.log("Error:", err));
 
-        document.getElementById("Join").onclick = async () => {
+        connection.onreconnected(() => setConnectedUi(true));
+        connection.onclose(() => setConnectedUi(false));
+
+        connectBtn.onclick = async () => {
+            if (connection.state !== signalR.HubConnectionState.Disconnected) return;
+
+            try {
+                await connection.start();
+                setConnectedUi(true);
+                logAuth("Connected to /chatHub");
+            } catch (err) {
+                setConnectedUi(false);
+                logAuth(err.toString());
+            }
+        };
+
+        disconnectBtn.onclick = async () => {
+            try {
+                await connection.stop();
+                setConnectedUi(false);
+                logAuth("Disconnected");
+            } catch (err) {
+                logAuth(err.toString());
+            }
+        };
+
+        joinBtn.onclick = async () => {
+            if (!ensureConnected()) return;
+
             const groupName = document.getElementById("Group").value.trim();
             if (!groupName) return;
 
             try {
                 await connection.invoke("JoinGroup", groupName);
-
                 const messages = await connection.invoke("GetMessages", groupName);
                 messagesBody.innerHTML = "";
                 messages.forEach((item) => addRow(item.user, item.message));
             } catch (err) {
                 console.log(err);
+                logAuth(err.toString());
             }
         };
 
-        document.getElementById("Leave").onclick = async () => {
+        leaveBtn.onclick = async () => {
+            if (!ensureConnected()) return;
+
             const groupName = document.getElementById("Group").value.trim();
             if (!groupName) return;
 
@@ -73,10 +218,13 @@
                 messagesBody.innerHTML = "";
             } catch (err) {
                 console.log(err);
+                logAuth(err.toString());
             }
         };
 
-        document.getElementById("Send").onclick = async () => {
+        sendBtn.onclick = async () => {
+            if (!ensureConnected()) return;
+
             const groupName = document.getElementById("Group").value.trim();
             const message = document.getElementById("Message").value.trim();
             if (!groupName || !message) return;
@@ -86,6 +234,7 @@
                 document.getElementById("Message").value = "";
             } catch (err) {
                 console.log(err);
+                logAuth(err.toString());
             }
         };
     </script>
