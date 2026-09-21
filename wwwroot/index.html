@@ -105,7 +105,7 @@
           <input id="password" type="password" required minlength="4" placeholder="٤ أحرف على الأقل" />
           <button class="primary" id="authSubmit" type="submit">دخول</button>
           <div class="error" id="authError"></div>
-          <p class="hint">تجريبي: أحمد / 123456 — غرفة تقنية سرها 1234</p>
+          <p class="hint">تجريبي: أحمد / 123456 — الغرف المحمية تحتاج الكود + كلمة السر</p>
         </form>
       </div>
     </section>
@@ -410,7 +410,7 @@
         if (isTyping) state.typingUsers.add(user); else state.typingUsers.delete(user);
         renderTyping();
       });
-      connection.on("UserJoined", (user) => appendSystem(`${user} انضم إلى الالغرفة السرية`));
+      connection.on("UserJoined", (user) => appendSystem(`${user} انضم إلى الغرفة السرية`));
       connection.on("UserLeft", (user) => appendSystem(`${user} غادر`));
       connection.onreconnected(async () => {
         if (state.room) {

@@ -13,8 +13,10 @@ if (!string.IsNullOrEmpty(port))
     builder.WebHost.UseUrls($"http://*:{port}");
 
 var jwtKey = Encoding.UTF8.GetBytes("SuperSecretKey_12345678901234567890");
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException(
+        "Connection string 'DefaultConnection' is missing. Set it via user-secrets or environment variable.");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
@@ -286,30 +288,25 @@ app.MapPost("/api/rooms/join", async (JoinRoomRequest req, AppDbContext db) =>
 
     RoomEntity? room = null;
     if (!string.IsNullOrWhiteSpace(code))
-        room = await db.Rooms.FirstOrDefaultAsync(r => r.InviteCode == code.ToUpperInvariant() || r.InviteCode == code);
+        room = await db.Rooms.FirstOrDefaultAsync(r =>
+            r.InviteCode == code.ToUpperInvariant() || r.InviteCode == code);
     else if (!string.IsNullOrWhiteSpace(name))
         room = await db.Rooms.FirstOrDefaultAsync(r => r.Name == name);
 
     if (room is null)
         return Results.NotFound(new { message = "الغرفة غير موجودة" });
 
-    // توحيد الكود للتحقق
-    if (!string.IsNullOrWhiteSpace(code))
-        code = room.InviteCode;
-
+    var codeOk = !string.IsNullOrWhiteSpace(code)
+        && code.Equals(room.InviteCode, StringComparison.OrdinalIgnoreCase);
     var hasPassword = !string.IsNullOrEmpty(room.PasswordHash);
+
+    if (!codeOk)
+        return Results.Json(new { message = "كود الدعوة مطلوب وغير صحيح" }, statusCode: StatusCodes.Status403Forbidden);
 
     if (hasPassword)
     {
         if (string.IsNullOrEmpty(password) || !PasswordHelper.Verify(password, room.PasswordHash!))
             return Results.Json(new { message = "كلمة سر الغرفة غير صحيحة" }, statusCode: StatusCodes.Status403Forbidden);
-    }
-    else
-    {
-        // بدون كلمة سر: يلزم كود الدعوة
-        if (string.IsNullOrWhiteSpace(req.Code) ||
-            !req.Code.Trim().Equals(room.InviteCode, StringComparison.OrdinalIgnoreCase))
-            return Results.Json(new { message = "كود الدعوة غير صحيح" }, statusCode: StatusCodes.Status403Forbidden);
     }
 
     return Results.Ok(new

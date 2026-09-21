@@ -115,15 +115,17 @@ public class ChatHub(AppDbContext db) : Hub<IChatClient>
 
     private static bool IsAuthorized(RoomEntity room, string? code, string? password)
     {
-        var hasPassword = !string.IsNullOrEmpty(room.PasswordHash);
         var codeOk = !string.IsNullOrWhiteSpace(code)
             && code.Trim().Equals(room.InviteCode, StringComparison.OrdinalIgnoreCase);
-        var passwordOk = hasPassword
-            && !string.IsNullOrEmpty(password)
+
+        var hasPassword = !string.IsNullOrEmpty(room.PasswordHash);
+        if (!hasPassword)
+            return codeOk;
+
+        var passwordOk = !string.IsNullOrEmpty(password)
             && PasswordHelper.Verify(password, room.PasswordHash!);
 
-        if (hasPassword)
-            return passwordOk && (codeOk || true); // كلمة السر كافية مع معرفة الاسم بعد /api/rooms/join
-        return codeOk;
+        // الغرف المحمية تتطلب كود الدعوة + كلمة السر معاً
+        return codeOk && passwordOk;
     }
 }

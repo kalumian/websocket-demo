@@ -7,6 +7,7 @@ public interface IAppHub
     Task YesIheardYou(string message);
 }
 
+[Authorize(AuthenticationSchemes = "Bearer")]
 public class AppHub : Hub<IAppHub>
 {
     public override async Task OnConnectedAsync()

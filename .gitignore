@@ -43,3 +43,8 @@ Desktop.ini
 
 # JetBrains
 .idea/
+
+# Secrets / local overrides (never commit credentials)
+appsettings.Local.json
+**/appsettings.*.local.json
+secrets.json
